@@ -42,7 +42,13 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   response => {
     console.log(`响应: ${response.status} (${response.statusText})`);
-    console.log(`响应体 (前 500 字符): ${JSON.stringify(response.data).substring(0, 500)}...`);
+    let dataStr = '';
+    if (response.data) {
+      dataStr = JSON.stringify(response.data).substring(0, 500) + '...';
+    } else {
+      dataStr = '(空响应体)';
+    }
+    console.log(`响应体 (前 500 字符): ${dataStr}`);
     return response;
   },
   async error => {
@@ -63,7 +69,12 @@ async function makeRequest(config, retries = 3, requestLabel = 'Unknown Request'
       const response = await api(config);
       const endTime = Date.now();
       console.log(`成功，耗时: ${endTime - startTime}ms`);
-      return response.data;
+      // 修复：处理空响应体（如 204 No Content）
+      if (response.data && typeof response.data === 'object') {
+        return response.data;
+      } else {
+        return {}; // 空响应，返回空对象
+      }
     } catch (err) {
       const endTime = Date.now();
       console.error(`尝试 ${attempt} 失败 (耗时: ${endTime - startTime}ms): ${err.message}`);
@@ -221,14 +232,26 @@ async function getBranchSha(token, owner, repo, branch) {
 
 async function dispatchWorkflow(token, owner, repo, workflowId, inputs = {}) {
   console.log(`\n=== 步骤 2: 触发工作流 ${workflowId} ===`);
-  const config = {
+  const dispatchConfig = {
     method: 'POST',
     url: `/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
     data: { ref: 'main', inputs }
   };
-  const res = await makeRequest(config, 3, '触发工作流');
-  const runId = res.id;
-  console.log(`运行 ID: ${runId}`);
+  const dispatchRes = await makeRequest(dispatchConfig, 3, '触发工作流');
+  console.log('工作流触发成功 (204 No Content)');
+
+  // 修复：dispatch 返回 204 无 body/id，所以查询最新 runs 获取 runId
+  console.log('查询最新运行 ID...');
+  const runsConfig = {
+    method: 'GET',
+    url: `/repos/${owner}/${repo}/actions/runs?per_page=1&sort=timestamp&direction=desc`
+  };
+  const runs = await makeRequest(runsConfig, 3, '获取最新 runs');
+  if (!runs.workflow_runs || runs.workflow_runs.length === 0) {
+    throw new Error('未找到工作流运行');
+  }
+  const runId = runs.workflow_runs[0].id;
+  console.log(`最新运行 ID: ${runId}`);
 
   console.log(`开始轮询...`);
   let pollCount = 0;
