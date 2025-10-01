@@ -17,6 +17,9 @@ const localDir = './code'; // 修改：项目根目录下的 code 文件夹
 const workflowId = 'main.yml'; // 工作流文件名
 const downloadDir = '/tmp/downloads'; // Linux 云端路径：下载目录
 
+// 二进制文件扩展名列表（包括 .zip，避免损坏）
+const binaryExtensions = new Set(['.zip', '.jar', '.war', '.ear', '.exe', '.dll', '.so', '.dylib', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.mp3', '.mp4', '.avi', '.mov', '.bin', '.gz', '.tar', '.7z', '.rar']);
+
 // 创建 Axios 实例：禁用 keep-alive，添加超时
 const api = axios.create({
   baseURL: 'https://api.github.com',
@@ -127,9 +130,22 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
       } else {
         console.log(`读取文件: ${itemRelPath}`);
         try {
-          const content = fs.readFileSync(fullPath, 'utf8');
-          console.log(`内容长度: ${content.length} 字符`);
-          files.push({ path: itemRelPath, content, type: 'blob' });
+          // 修复：用 Buffer 读取所有文件，避免二进制损坏
+          const buffer = fs.readFileSync(fullPath);
+          const ext = path.extname(fullPath).toLowerCase();
+          let content, encoding;
+          if (binaryExtensions.has(ext)) {
+            // 二进制文件：base64 编码
+            content = buffer.toString('base64');
+            encoding = 'base64';
+            console.log(`二进制文件 (${ext})，使用 base64 编码，长度: ${buffer.length} 字节`);
+          } else {
+            // 文本文件：UTF-8
+            content = buffer.toString('utf8');
+            encoding = 'utf-8';
+            console.log(`文本文件，UTF-8 编码，长度: ${content.length} 字符`);
+          }
+          files.push({ path: itemRelPath, content, encoding, type: 'blob' });
         } catch (readErr) {
           console.error(`读取失败 ${fullPath}:`, readErr.message);
         }
@@ -150,11 +166,11 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
     const batch = files.slice(i, i + 5);
     console.log(`\n--- 批次 ${Math.floor(i / 5) + 1}: ${i + 1}-${Math.min(i + 5, files.length)} ---`);
     for (const file of batch) {
-      console.log(`创建 blob: ${file.path}`);
+      console.log(`创建 blob: ${file.path} (编码: ${file.encoding})`);
       const blobConfig = {
         method: 'POST',
         url: `/repos/${owner}/${repo}/git/blobs`,
-        data: { content: file.content, encoding: 'utf-8' }
+        data: { content: file.content, encoding: file.encoding }
       };
       const res = await makeRequest(blobConfig, 3, `Blob ${file.path}`);
       const blobSha = res.sha;
