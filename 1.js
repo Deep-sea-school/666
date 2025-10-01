@@ -114,6 +114,25 @@ async function createRepoIfNotExists(owner, repo) {
   }
 }
 
+async function deleteRepo(owner, repo) {
+  console.log(`\n=== 步骤 4: 删除临时仓库 ${owner}/${repo} ===`);
+  const deleteConfig = {
+    method: 'DELETE',
+    url: `/repos/${owner}/${repo}`
+  };
+  try {
+    await makeRequest(deleteConfig, 1, `删除仓库 ${repo}`); // 无重试，快速删除
+    console.log(`仓库删除成功`);
+  } catch (err) {
+    if (err.response?.status === 404) {
+      console.log(`仓库已不存在，无需删除`);
+    } else {
+      console.error(`删除仓库失败: ${err.message}`);
+      // 不抛出错误，继续完成脚本
+    }
+  }
+}
+
 async function uploadDirectory(token, owner, repo, branch, localDir, basePath = '') {
   console.log(`\n=== 步骤 1: 开始上传目录 ${localDir} ===`);
   // 确保上传目录存在
@@ -338,7 +357,9 @@ async function main() {
     await dispatchWorkflow(token, owner, repo, workflowId);
     const path = await downloadLatestRelease(token, owner, repo, downloadDir);
     console.log(`\n下载路径: ${path}`);
-    console.log('成功完成！');
+    console.log('所有步骤完成，现在删除临时仓库...');
+    await deleteRepo(owner, repo); // 最后删除临时仓库
+    console.log('脚本执行完毕！');
   } catch (error) {
     console.error('\n=== 失败 ===');
     console.error('详情:', error.message);
