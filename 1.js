@@ -123,7 +123,7 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
       const itemRelPath = path.join(relPath, uploadName);
       if (item.isDirectory()) {
         console.log(`进入子目录: ${uploadName} (原: ${item.name})`);
-        readDirRecursively(fullPath, itemRelPath); // 递归使用 itemRelPath
+        readDirRecursively(fullPath, path.dirname(itemRelPath)); // 修正：递归使用正确的 relPath
       } else {
         console.log(`读取文件: ${itemRelPath}`);
         try {
