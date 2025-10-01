@@ -14,7 +14,7 @@ const owner = 'Deep-sea-school';
 const repo = 'test-android';
 const branch = 'main';
 const localDir = '/tmp/test-gradle-main'; // Linux 云端路径：上传目录
-const workflowId = '.github/workflows/main.yml';
+const workflowId = 'main.yml'; // 修正：使用文件名，而非完整路径
 const downloadDir = '/tmp/downloads'; // Linux 云端路径：下载目录
 
 // 创建 Axios 实例：禁用 keep-alive，添加超时
@@ -289,6 +289,7 @@ async function main() {
   console.log(`Token: ${token.substring(0, 10)}... (已合并)`);
   console.log(`代理变量已清除，避免协议错误`);
   console.log(`Linux 云端路径: 上传 ${localDir}, 下载 ${downloadDir}`);
+  console.log(`工作流 ID: ${workflowId} (已修正为文件名)`);
 
   try {
     await createRepoIfNotExists(owner, repo); // 先检查/创建仓库
