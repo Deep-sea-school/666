@@ -1,0 +1,26 @@
+name: Run 1.js Script
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'  # 使用 Node.js 20 版本；可根据需要调整
+
+    - name: Install dependencies
+      run: npm init -y && npm install axios   # 如果 1.js 需要依赖（如 axios），这里安装；否则可省略
+
+    - name: Run 1.js
+      run: node 1.js
