@@ -13,7 +13,7 @@ const token = tokenPart1 + tokenPart2; // 合并使用
 const owner = 'Deep-sea-school';
 const repo = 'test-android';
 const branch = 'main';
-const localDir = './code'; // 项目根目录下的 code 文件夹
+const localDir = './code'; // 修改：项目根目录下的 code 文件夹
 const workflowId = 'main.yml'; // 工作流文件名
 const downloadDir = '/tmp/downloads'; // Linux 云端路径：下载目录
 
@@ -89,7 +89,7 @@ async function createRepoIfNotExists(owner, repo) {
           name: repo,
           description: 'Test Android Repo for automated uploads',
           private: false, // 公开；如需私有，设为 true
-          auto_init: false // 修改：不自动初始化，避免初始提交冲突
+          auto_init: true // 初始化 README
         }
       };
       const res = await makeRequest(createConfig, 3, `创建仓库 ${repo}`);
@@ -123,7 +123,7 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
       const itemRelPath = path.join(relPath, uploadName);
       if (item.isDirectory()) {
         console.log(`进入子目录: ${uploadName} (原: ${item.name})`);
-        readDirRecursively(fullPath, path.dirname(itemRelPath)); // 修正：递归使用正确的 relPath
+        readDirRecursively(fullPath, path.join(relPath, uploadName)); // 递归时也使用重命名
       } else {
         console.log(`读取文件: ${itemRelPath}`);
         try {
@@ -145,20 +145,6 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
     return; // 跳过上传，但继续后续步骤
   }
 
-  // 检查分支是否存在
-  let currentRef;
-  try {
-    currentRef = await getBranchSha(token, owner, repo, branch);
-    console.log(`当前分支存在，SHA: ${currentRef.object.sha}`);
-  } catch (err) {
-    if (err.response?.status === 404) {
-      console.log(`分支 ${branch} 不存在，将创建初始提交`);
-      currentRef = null;
-    } else {
-      throw err;
-    }
-  }
-
   const blobs = [];
   for (let i = 0; i < files.length; i += 5) {
     const batch = files.slice(i, i + 5);
@@ -178,14 +164,13 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
   }
 
   console.log(`\n创建 tree...`);
+  const currentSha = await getBranchSha(token, owner, repo, branch);
+  console.log(`当前 SHA: ${currentSha.object.sha}`);
   const treeConfig = {
     method: 'POST',
     url: `/repos/${owner}/${repo}/git/trees`,
-    data: { tree: blobs }
+    data: { base_tree: currentSha.object.sha, tree: blobs }
   };
-  if (currentRef) {
-    treeConfig.data.base_tree = currentRef.object.sha;
-  }
   const treeRes = await makeRequest(treeConfig, 3, 'Tree');
   const treeSha = treeRes.sha;
   console.log(`Tree SHA: ${treeSha}`);
@@ -194,35 +179,20 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
   const commitConfig = {
     method: 'POST',
     url: `/repos/${owner}/${repo}/git/commits`,
-    data: {
-      message: `从 ${localDir} 上传文件`,
-      tree: treeSha
-    }
+    data: { message: `从 ${localDir} 上传文件`, tree: treeSha, parents: [currentSha.object.sha] }
   };
-  if (currentRef) {
-    commitConfig.data.parents = [currentRef.object.sha];
-  }
   const commitRes = await makeRequest(commitConfig, 3, 'Commit');
   const commitSha = commitRes.sha;
   console.log(`Commit SHA: ${commitSha}`);
 
-  console.log(`\n更新/创建分支...`);
-  let refConfig;
-  if (currentRef) {
-    refConfig = {
-      method: 'PATCH',
-      url: `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-      data: { sha: commitSha }
-    };
-  } else {
-    refConfig = {
-      method: 'POST',
-      url: `/repos/${owner}/${repo}/git/refs`,
-      data: { ref: `refs/heads/${branch}`, sha: commitSha }
-    };
-  }
-  await makeRequest(refConfig, 3, `创建/更新分支 ${branch}`);
-  console.log(`分支 ${branch} 更新/创建成功`);
+  console.log(`\n更新分支...`);
+  const refConfig = {
+    method: 'PATCH',
+    url: `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+    data: { sha: commitSha }
+  };
+  await makeRequest(refConfig, 3, `更新分支 ${branch}`);
+  console.log(`分支更新成功`);
 
   console.log(`\n=== 上传完成: ${files.length} 文件 ===`);
 }
@@ -238,7 +208,7 @@ async function dispatchWorkflow(token, owner, repo, workflowId, inputs = {}) {
   const config = {
     method: 'POST',
     url: `/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
-    data: { ref: branch, inputs } // 使用 branch 而非硬编码 'main'
+    data: { ref: 'main', inputs }
   };
   const res = await makeRequest(config, 3, '触发工作流');
   const runId = res.id;
