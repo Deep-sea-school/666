@@ -13,8 +13,8 @@ const token = tokenPart1 + tokenPart2; // 合并使用
 const owner = 'Deep-sea-school';
 const repo = 'test-android';
 const branch = 'main';
-const localDir = '/tmp/test-gradle-main'; // Linux 云端路径：上传目录
-const workflowId = 'main.yml'; // 修正：使用文件名，而非完整路径
+const localDir = './code'; // 修改：项目根目录下的 code 文件夹
+const workflowId = 'main.yml'; // 工作流文件名
 const downloadDir = '/tmp/downloads'; // Linux 云端路径：下载目录
 
 // 创建 Axios 实例：禁用 keep-alive，添加超时
@@ -118,10 +118,12 @@ async function uploadDirectory(token, owner, repo, branch, localDir, basePath = 
     console.log(`发现 ${items.length} 个项目`);
     for (const item of items) {
       const fullPath = path.join(dirPath, item.name);
-      const itemRelPath = path.join(relPath, item.name);
+      // 修改：如果文件夹名为 'github'，上传时重命名为 '.github'
+      const uploadName = item.name === 'github' ? '.github' : item.name;
+      const itemRelPath = path.join(relPath, uploadName);
       if (item.isDirectory()) {
-        console.log(`进入子目录: ${item.name}`);
-        readDirRecursively(fullPath, itemRelPath);
+        console.log(`进入子目录: ${uploadName} (原: ${item.name})`);
+        readDirRecursively(fullPath, path.join(relPath, uploadName)); // 递归时也使用重命名
       } else {
         console.log(`读取文件: ${itemRelPath}`);
         try {
@@ -288,8 +290,8 @@ async function main() {
   console.log(`配置: ${owner}/${repo}, 分支: ${branch}`);
   console.log(`Token: ${token.substring(0, 10)}... (已合并)`);
   console.log(`代理变量已清除，避免协议错误`);
-  console.log(`Linux 云端路径: 上传 ${localDir}, 下载 ${downloadDir}`);
-  console.log(`工作流 ID: ${workflowId} (已修正为文件名)`);
+  console.log(`项目路径: 上传 ${localDir}, 下载 ${downloadDir}`);
+  console.log(`工作流 ID: ${workflowId}`);
 
   try {
     await createRepoIfNotExists(owner, repo); // 先检查/创建仓库
